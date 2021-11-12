@@ -125,17 +125,36 @@ def main(args):
 
     if args.checkpoint is not None:
         if os.path.isfile(args.checkpoint):
-            print("Loading model and optimizer from checkpoint '{}'".format(
-                args.checkpoint))
-            sys.stdout.flush()
+            if hasattr(cfg.model, 'recognition_head') and \
+                cfg.model.recognition_head.lang =='VN' and \
+                    not cfg.train_cfg.lang_pretrain=="VN":
 
-            checkpoint = torch.load(args.checkpoint)
+                print("Loading model and optimizer from checkpoint '{}'".format(
+                    args.checkpoint))
+                sys.stdout.flush()
 
-            d = dict()
-            for key, value in checkpoint['state_dict'].items():
-                tmp = key[7:]
-                d[tmp] = value
-            model.load_state_dict(d)
+                checkpoint = torch.load(args.checkpoint)
+
+                d = dict()
+                for key, value in checkpoint['state_dict'].items():
+                    if 'rec' in key:
+                        continue
+                    tmp = key[7:]
+                    d[tmp] = value
+                model.load_state_dict(d)
+            else:
+                print("Loading model and optimizer from checkpoint '{}'".format(
+                    args.checkpoint))
+                sys.stdout.flush()
+
+                checkpoint = torch.load(args.checkpoint)
+
+                d = dict()
+                for key, value in checkpoint['state_dict'].items():
+                    tmp = key[7:]
+                    d[tmp] = value
+                model.load_state_dict(d)
+
         else:
             print("No checkpoint found at '{}'".format(args.resume))
             raise

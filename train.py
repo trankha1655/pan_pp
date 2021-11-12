@@ -226,9 +226,11 @@ def main(args):
         
         checkpoint = torch.load(cfg.train_cfg.pretrain)
 
-        if hasattr(cfg.model, 'recognition_head'):
-            if cfg.model.recognition_head.lang =='VN':
-                reuse_pretrained(model,checkpoint['state_dict'])
+        if hasattr(cfg.model, 'recognition_head') and \
+                cfg.model.recognition_head.lang =='VN' and \
+                    not cfg.train_cfg.lang_pretrain=="VN":
+            
+            reuse_pretrained(model,checkpoint['state_dict'])
         else:
 
             model.load_state_dict(checkpoint['state_dict'])

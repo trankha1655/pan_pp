@@ -61,7 +61,7 @@ def random_horizontal_flip(imgs):
             imgs[i] = np.flip(imgs[i], axis=1).copy()
     return imgs
 
-
+#Augument
 def random_rotate(imgs):
     max_angle = 10
     angle = random.random() * 2 * max_angle - max_angle
@@ -75,7 +75,7 @@ def random_rotate(imgs):
         imgs[i] = img_rotation
     return imgs
 
-
+#Augument
 def scale_aligned(img, h_scale, w_scale):
     h, w = img.shape[0:2]
     h = int(h * h_scale + 0.5)
@@ -87,7 +87,7 @@ def scale_aligned(img, h_scale, w_scale):
     img = cv2.resize(img, dsize=(w, h))
     return img
 
-
+#Augument
 def scale_aligned_short(img, short_size=736):
     h, w = img.shape[0:2]
     scale = short_size * 1.0 / min(h, w)
@@ -100,7 +100,7 @@ def scale_aligned_short(img, short_size=736):
     img = cv2.resize(img, dsize=(w, h))
     return img
 
-
+#Augument
 def random_scale(img, short_size=736):
     h, w = img.shape[0:2]
 
@@ -114,7 +114,7 @@ def random_scale(img, short_size=736):
     img = scale_aligned(img, h_scale, w_scale)
     return img
 
-
+#Augument
 def random_crop_padding(imgs, target_size):
     h, w = imgs[0].shape[0:2]
     t_w, t_h = target_size
@@ -296,6 +296,10 @@ class PAN_PP_IC15(data.Dataset):
                 img_name for img_name in mmcv.utils.scandir(data_dir, '.png')
             ])
 
+            img_names.extend([
+                img_name for img_name in mmcv.utils.scandir(data_dir, '.jpge')
+            ])
+
             img_paths = []
             gt_paths = []
             for idx, img_name in enumerate(img_names):
@@ -331,18 +335,21 @@ class PAN_PP_IC15(data.Dataset):
         img = get_img(img_path, self.read_type)
         bboxes, words = get_ann(img, gt_path)
 
+        #fit count box == count word
         if bboxes.shape[0] > self.max_word_num:
             bboxes = bboxes[:self.max_word_num]
             words = words[:self.max_word_num]
+
 
         gt_words = np.full((self.max_word_num + 1, self.max_word_len),
                            self.char2id['PAD'],
                            dtype=np.int32)
         word_mask = np.zeros((self.max_word_num + 1, ), dtype=np.int32)
+
         for i, word in enumerate(words):
             if word == '###':
                 continue
-            word = word.lower()
+            #word = word.lower()
             gt_word = np.full((self.max_word_len, ),
                               self.char2id['PAD'],
                               dtype=np.int)
@@ -362,6 +369,9 @@ class PAN_PP_IC15(data.Dataset):
 
         if self.is_transform:
             img = random_scale(img, self.short_size)
+
+        print(img.shape)
+        print(k)
 
         gt_instance = np.zeros(img.shape[0:2], dtype='uint8')
         training_mask = np.ones(img.shape[0:2], dtype='uint8')

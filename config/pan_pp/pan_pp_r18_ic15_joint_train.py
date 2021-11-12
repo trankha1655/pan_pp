@@ -60,10 +60,11 @@ data = dict(
 train_cfg = dict(
     lr=1e-3,
     schedule='polylr',
-    epoch=3,
+    epoch=50,
     optimizer='Adam',
     use_ex=False,
-    pretrain= '../panpp_r18_joint_train.pth.tar'
+    pretrain= '../panpp_r18_joint_train.pth.tar',
+    lang_pretrain='VN'
     
 )
 test_cfg = dict(
