@@ -64,7 +64,7 @@ train_cfg = dict(
     optimizer='Adam',
     use_ex=False,
     pretrain= '../panpp_r18_joint_train.pth.tar',
-    lang_pretrain='VN'
+    lang_pretrain='EN'
     
 )
 test_cfg = dict(

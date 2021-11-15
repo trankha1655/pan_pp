@@ -161,14 +161,14 @@ class PAN_PP_RecHead(nn.Module):
     def generate_dict(self,targets,maxlen=1):
         
         if self.training:
-            pass
+            #pass
             target_candidates = []
             distance_candidates = []
             #beziers = [p.beziers for p in targets]
-            targets = torch.cat([x.text for x in targets], dim=0)
+            targets = torch.cat([x for x in targets], dim=0)
             for target in targets:
                 rec = target.cpu().detach().numpy()
-                rec = decode(rec)
+                rec = self.decode(rec)
 
                 # candidates = {}
                 # candidates[rec] = 0
@@ -191,7 +191,7 @@ class PAN_PP_RecHead(nn.Module):
                 candidates_encoded = []
                 distance_can = []
                 for can in candidates:
-                    word = encode(can[0])
+                    word = self.encode(can[0])
                     
                     candidates_encoded.append(word)
                     distance_can.append(1 / (can[1] + 0.1))
@@ -217,7 +217,7 @@ class PAN_PP_RecHead(nn.Module):
             distance_candidates = []
             for target in targets:
                 rec = target.cpu().detach().numpy()
-                rec = decode(rec)
+                rec = self.decode(rec)
                 candidates = {}
                 for word in self.dictionary:
                     candidates[word] = eval(rec, word)
@@ -225,7 +225,7 @@ class PAN_PP_RecHead(nn.Module):
                 candidates_encoded = []
                 distance_can = []
                 for can in candidates:
-                    word = encode(can[0])
+                    word = self.encode(can[0])
                     candidates_encoded.append(word)
 
                 target_candidates.append(candidates_encoded)
@@ -449,7 +449,7 @@ class Decoder(nn.Module):
             targets = torch.cat([x.text for x in targets], dim=0)
             for target in targets:
                 rec = target.cpu().detach().numpy()
-                rec = decode(rec)
+                rec = self.decode(rec)
 
                 # candidates = {}
                 # candidates[rec] = 0
@@ -472,7 +472,7 @@ class Decoder(nn.Module):
                 candidates_encoded = []
                 distance_can = []
                 for can in candidates:
-                    word = encode(can[0])
+                    word = self.encode(can[0])
                     
                     candidates_encoded.append(word)
                     distance_can.append(1 / (can[1] + 0.1))
@@ -498,7 +498,7 @@ class Decoder(nn.Module):
             #distance_candidates = []
             for target in targets:
                 rec = target.cpu().detach().numpy()
-                rec = decode(rec)
+                rec = self.decode(rec)
                 candidates = {}
                 for word in self.dictionary:
                     candidates[word] = eval(rec, word)                                     #len: maxlen(1)
@@ -506,7 +506,7 @@ class Decoder(nn.Module):
                 candidates_encoded = []
                 #distance_can = []
                 for can in candidates:
-                    word = encode(can[0])  #list | len= 32
+                    word = self.encode(can[0])  #list | len= 32
                     candidates_encoded.append(word)                 #word is always correct *not meaning == ground truth
                 #candidates_encoded : list | len = 1 or maxlen
 
