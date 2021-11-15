@@ -105,7 +105,7 @@ class PAN_PP(nn.Module):
         if self.rec_head is not None:
             if self.training:
                 if cfg.train_cfg.use_ex:
-                    x_crops, 0 = self.rec_head.extract_feature(
+                    x_crops, gt_words = self.rec_head.extract_feature(
                         f, (imgs.size(2), imgs.size(3)),
                         gt_instances * gt_kernels[:, 0] * training_masks,
                         gt_bboxes, gt_words, word_masks)

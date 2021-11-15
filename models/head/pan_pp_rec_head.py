@@ -149,7 +149,7 @@ class PAN_PP_RecHead(nn.Module):
     def encode(self,s):
         word=[]
         for c in s:
-            word.append(self.char2id[c])
+            word.append(int(self.char2id[c]))
 
         while len(word) < 32:
             word.append(104)
@@ -165,7 +165,7 @@ class PAN_PP_RecHead(nn.Module):
             target_candidates = []
             distance_candidates = []
             #beziers = [p.beziers for p in targets]
-            targets = torch.cat([x for x in targets], dim=0)
+            #targets = torch.cat([x for x in targets], dim=0)
             for target in targets:
                 rec = target.cpu().detach().numpy()
                 rec = self.decode(rec)
@@ -243,7 +243,7 @@ class PAN_PP_RecHead(nn.Module):
         targets = targets["targets"]
         total_acc=0.0
         output = []
-        for idx in range(target.size(0)):
+        for idx in range(targets.size(0)):
             input= inputs[idx]
             target= targets[idx]
 
@@ -316,9 +316,12 @@ class PAN_PP_RecHead(nn.Module):
 
         if self.training:
             out=[]
-            targets_candidates= targets['targets']
-            for i in range(target.size(0)):
+            
+            targets_candidates= targets['targets'] 
+            print('FULLdata', targets_candidates.shape)
+            for i in range(targets_candidates.size(0)):
                 target= targets_candidates[i]
+                print("forwardHEAD", target.shape)
                 out.append(
                                 self.decoder(x, holistic_feature, target)
                 )
@@ -380,6 +383,7 @@ class Decoder(nn.Module):
         x_flatten = x.view(batch_size, feature_dim, H * W).permute(0, 2, 1)
 
         max_seq_len = target.size(1)
+        
         h = []
         for i in range(self.num_layers):
             h.append((x.new_zeros((x.size(0), self.hidden_dim),
@@ -390,6 +394,7 @@ class Decoder(nn.Module):
         out = x.new_zeros((x.size(0), max_seq_len + 1, self.vocab_size),
                           dtype=torch.float32)
         for t in range(max_seq_len + 1):
+            print('char: ',t)
             if t == 0:
                 xt = holistic_feature
             elif t == 1:
@@ -399,6 +404,7 @@ class Decoder(nn.Module):
                 xt = self.emb(it)
             else:
                 it = target[:, t - 2]
+                print("IT", it)
                 xt = self.emb(it)
 
             for i in range(self.num_layers):

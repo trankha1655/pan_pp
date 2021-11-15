@@ -133,7 +133,7 @@ def get_ann(img, gt_path):
         line = line.encode('utf-8').decode('utf-8-sig')
         line = line.replace('\xef\xbb\xbf', '')
         gt = line.split(',')
-        word= gt8] if len(a) ==9 else ','.join(gt[8:])
+        word= gt[8] if len(gt) ==9 else ','.join(gt[8:])
         word = word.replace('\r', '').replace('\n', '')
         word = full_parse(word)
         if word[0] == '#':
