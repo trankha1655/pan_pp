@@ -200,11 +200,11 @@ class PAN_PP_RecHead(nn.Module):
                 distance_candidates.append(distance_can)
                 target_candidates.append(candidates_encoded)
 
-            distance_candidates = torch.Tensor(distance_candidates).to(device="cuda")
+            distance_candidates = torch.Tensor(distance_candidates)
             # distance_candidates = torch.sum(distance_candidates, dim=0)
             # distance_candidates = nn.functional.log_softmax(distance_candidates, dim=0)
 
-            target_candidates = torch.Tensor(target_candidates).to(device="cuda")
+            target_candidates = torch.LongTensor(target_candidates)
             # distance_candidates = torch.Tensor(distance_candidates).to(device='cuda')
             targets = target_candidates
             targets = targets.permute((1, 0, 2))
@@ -272,6 +272,7 @@ class PAN_PP_RecHead(nn.Module):
                 total_acc+=  acc_rec
             
 
+        scores = scores.to("cuda")
         output = torch.Tensor(output).to(device="cuda")
         output = nn.functional.softmax(output, dim=0)
         scores = torch.mean(scores, dim=0)
@@ -379,6 +380,7 @@ class Decoder(nn.Module):
 
     def forward(self, x, holistic_feature, target):
         # print(x.shape, holistic_feature.shape, target.shape)
+        target = target.to('cuda')
         batch_size, feature_dim, H, W = x.size()
         x_flatten = x.view(batch_size, feature_dim, H * W).permute(0, 2, 1)
 
