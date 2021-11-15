@@ -4,6 +4,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from dict_trie import Trie
+from editdistance import eval
+
 from .backbone import build_backbone
 from .head import build_head
 from .neck import build_neck
@@ -102,7 +105,7 @@ class PAN_PP(nn.Module):
         if self.rec_head is not None:
             if self.training:
                 if cfg.train_cfg.use_ex:
-                    x_crops, gt_words = self.rec_head.extract_feature(
+                    x_crops, 0 = self.rec_head.extract_feature(
                         f, (imgs.size(2), imgs.size(3)),
                         gt_instances * gt_kernels[:, 0] * training_masks,
                         gt_bboxes, gt_words, word_masks)
@@ -110,10 +113,16 @@ class PAN_PP(nn.Module):
                     x_crops, gt_words = self.rec_head.extract_feature(
                         f, (imgs.size(2), imgs.size(3)),
                         gt_instances * training_masks, gt_bboxes, gt_words,
-                        word_masks)
+                        word_masks) 
 
                 if x_crops is not None:
-                    out_rec = self.rec_head(x_crops, gt_words)
+                    #this line generate gt_words to 10 candidate (CAUTION: GEN WHEN IN TRANING PHASE)
+                    
+                    gt_words= self.rec_head.generate_dict(gt_words)
+                    #gt_words= {target: [10,num,32] , score: [num, 10] 
+
+                    out_rec = self.rec_head(x_crops, gt_words) 
+                    
                     loss_rec = self.rec_head.loss(out_rec,
                                                   gt_words,
                                                   reduce=False)
@@ -124,14 +133,15 @@ class PAN_PP(nn.Module):
                     }
                 outputs.update(loss_rec)
             else:
+                #target: [num, 32]
                 if len(det_res['bboxes']) > 0:
                     x_crops, _ = self.rec_head.extract_feature(
-                        f, (imgs.size(2), imgs.size(3)),
-                        f.new_tensor(det_res['label'],
-                                     dtype=torch.long).unsqueeze(0),
-                        bboxes=f.new_tensor(det_res['bboxes_h'],
-                                            dtype=torch.long),
-                        unique_labels=det_res['instances'])
+                            f, 
+                            (imgs.size(2), imgs.size(3)),
+                            f.new_tensor(det_res['label'], dtype=torch.long).unsqueeze(0),
+                            bboxes=f.new_tensor(det_res['bboxes_h'], dtype=torch.long),
+                            unique_labels=det_res['instances']
+                        )
                     words, word_scores = self.rec_head.forward(x_crops)
                 else:
                     words = []

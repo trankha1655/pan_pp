@@ -21,6 +21,96 @@ ic15_test_gt_dir = ic15_root_dir + \
                    'ch4_test_localization_transcription_gt/'
 
 
+
+vin_root_dir = './data/ICDAR2015/vietnamese_orgin/'
+
+vin_train_data_dir  = vin_root_dir +    'train_images/'
+vin_train_gt_dir    = vin_root_dir +    'labels/'
+vin_test_data_dir   = vin_root_dir +    'test_images/'
+vin_test_gt_dir     = vin_root_dir +    'labels/'
+
+
+dictionary = "aàáạảãâầấậẩẫăằắặẳẵAÀÁẠẢÃĂẰẮẶẲẴÂẦẤẬẨẪeèéẹẻẽêềếệểễEÈÉẸẺẼÊỀẾỆỂỄoòóọỏõôồốộổỗơờớợởỡOÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠiìíịỉĩIÌÍỊỈĨuùúụủũưừứựửữƯỪỨỰỬỮUÙÚỤỦŨyỳýỵỷỹYỲÝỴỶỸ"
+
+
+def make_groups():
+    groups = []
+    i = 0
+    while i < len(dictionary) - 5:
+        group = [c for c in dictionary[i : i + 6]]
+        i += 6
+        groups.append(group)
+    return groups
+
+
+groups = make_groups()
+
+TONES = ["", "ˋ", "ˊ", "﹒", "ˀ", "˜"]
+SOURCES = ["ă", "â", "Ă", "Â", "ê", "Ê", "ô", "ơ", "Ô", "Ơ", "ư", "Ư", "Đ", "đ"]
+TARGETS = ["aˇ", "aˆ", "Aˇ", "Aˆ", "eˆ", "Eˆ", "oˆ", "o˒", "Oˆ", "O˒", "u˒", "U˒", "D^", "d^"]
+
+
+def parse_tone(word):
+    res = ""
+    tone = ""
+    for char in word:
+        if char in dictionary:
+            for group in groups:
+                if char in group:
+                    if tone == "":
+                        tone = TONES[group.index(char)]
+                    res += group[0]
+        else:
+            res += char
+    res += tone
+    return res
+
+
+def full_parse(word):
+    word = parse_tone(word)
+    res = ""
+    for char in word:
+        if char in SOURCES:
+            res += TARGETS[SOURCES.index(char)]
+        else:
+            res += char
+    return res
+
+
+def correct_tone_position(word):
+    word = word[:-1]
+    first_ord_char = ""
+    second_order_char = ""
+    for char in word:
+        for group in groups:
+            if char in group:
+                second_order_char = first_ord_char
+                first_ord_char = group[0]
+    if word[-1] == first_ord_char and second_order_char != "":
+        pair_chars = ["qu", "Qu", "qU", "QU", "gi", "Gi", "gI", "GI"]
+        for pair in pair_chars:
+            if pair in word and second_order_char in ["u", "U", "i", "I"]:
+                return first_ord_char
+        return second_order_char
+    return first_ord_char
+
+
+def decoder(recognition):
+    for char in TARGETS:
+        recognition = recognition.replace(char, SOURCES[TARGETS.index(char)])
+    replace_char = correct_tone_position(recognition)
+    if recognition[-1] in TONES:
+        tone = recognition[-1]
+        recognition = recognition[:-1]
+        for group in groups:
+            if replace_char in group:
+                recognition = recognition.replace(replace_char, group[TONES.index(tone)])
+    return recognition
+
+
+#print(decoder(full_parse("Rồng")))
+
+
 def get_img(img_path, read_type='pil'):
     try:
         if read_type == 'cv2':
@@ -43,7 +133,9 @@ def get_ann(img, gt_path):
         line = line.encode('utf-8').decode('utf-8-sig')
         line = line.replace('\xef\xbb\xbf', '')
         gt = line.split(',')
-        word = gt[8].replace('\r', '').replace('\n', '')
+        word= gt8] if len(a) ==9 else ','.join(gt[8:])
+        word = word.replace('\r', '').replace('\n', '')
+        word = full_parse(word)
         if word[0] == '#':
             words.append('###')
         else:
@@ -276,8 +368,8 @@ class PAN_PP_IC15(data.Dataset):
         self.read_type = read_type
 
         if split == 'train':
-            data_dirs = [ic15_train_data_dir]
-            gt_dirs = [ic15_train_gt_dir]
+            data_dirs = [ic15_train_data_dir, vin_train_data_dir]
+            gt_dirs = [ic15_train_gt_dir, vin_train_gt_dir]
         elif split == 'test':
             data_dirs = [ic15_test_data_dir]
             gt_dirs = [ic15_test_gt_dir]
@@ -288,6 +380,7 @@ class PAN_PP_IC15(data.Dataset):
         self.img_paths = []
         self.gt_paths = []
 
+        count=0
         for data_dir, gt_dir in zip(data_dirs, gt_dirs):
             img_names = [
                 img_name for img_name in mmcv.utils.scandir(data_dir, '.jpg')
@@ -301,17 +394,35 @@ class PAN_PP_IC15(data.Dataset):
             ])
 
             img_paths = []
-            gt_paths = []
-            for idx, img_name in enumerate(img_names):
-                img_path = data_dir + img_name
-                img_paths.append(img_path)
+            gt_paths = [] 
+            if count ==0:
+                for idx, img_name in enumerate(img_names): 
+                    
+                    img_path = data_dir + img_name
+                    img_paths.append(img_path)
 
-                gt_name = 'gt_' + img_name.split('.')[0] + '.txt'
-                gt_path = gt_dir + gt_name
-                gt_paths.append(gt_path)
+                    gt_name = 'gt_' + img_name.split('.')[0] + '.txt'
+                    gt_path = gt_dir + gt_name
+                    gt_paths.append(gt_path)
 
-            self.img_paths.extend(img_paths)
-            self.gt_paths.extend(gt_paths)
+                self.img_paths.extend(img_paths)
+                self.gt_paths.extend(gt_paths)
+            else:
+                for idx, img_name in enumerate(img_names): 
+                    
+                    img_path = data_dir + img_name
+                    img_paths.append(img_path)
+
+                    gt_name = img_name.split('.')[0][2:] 
+                    gt_name= str(int(gt_name))
+                    gt_name = 'gt_' + gt_name + '.txt' 
+                    gt_path = gt_dir + gt_name
+                    gt_paths.append(gt_path)
+
+                self.img_paths.extend(img_paths)
+                self.gt_paths.extend(gt_paths)
+
+            count+=1
 
         if report_speed:
             target_size = 3000
@@ -329,9 +440,12 @@ class PAN_PP_IC15(data.Dataset):
         return len(self.img_paths)
 
     def prepare_train_data(self, index):
+
+        #init path
         img_path = self.img_paths[index]
         gt_path = self.gt_paths[index]
 
+        #read image, bboxes, annotation
         img = get_img(img_path, self.read_type)
         bboxes, words = get_ann(img, gt_path)
 
@@ -340,12 +454,14 @@ class PAN_PP_IC15(data.Dataset):
             bboxes = bboxes[:self.max_word_num]
             words = words[:self.max_word_num]
 
-
+        #embding char to int
+        #   setup
         gt_words = np.full((self.max_word_num + 1, self.max_word_len),
                            self.char2id['PAD'],
                            dtype=np.int32)
         word_mask = np.zeros((self.max_word_num + 1, ), dtype=np.int32)
 
+        #   convert
         for i, word in enumerate(words):
             if word == '###':
                 continue
@@ -367,12 +483,13 @@ class PAN_PP_IC15(data.Dataset):
             gt_words[i + 1] = gt_word
             word_mask[i + 1] = 1
 
+        #transform? Why do it transform here? It can make mistake bboxes
         if self.is_transform:
+            #pass
             img = random_scale(img, self.short_size)
 
-        print(img.shape)
-        print(k)
-
+        
+        #draw gt_mask with 4 corner (if ### draw into traning_mask (for detection))
         gt_instance = np.zeros(img.shape[0:2], dtype='uint8')
         training_mask = np.ones(img.shape[0:2], dtype='uint8')
         if bboxes.shape[0] > 0:
@@ -383,6 +500,7 @@ class PAN_PP_IC15(data.Dataset):
                 if words[i] == '###':
                     cv2.drawContours(training_mask, [bboxes[i]], -1, 0, -1)
 
+        #init kernels from bboxes
         gt_kernels = []
         for rate in [self.kernel_scale]:
             gt_kernel = np.zeros(img.shape[0:2], dtype='uint8')
@@ -391,6 +509,7 @@ class PAN_PP_IC15(data.Dataset):
                 cv2.drawContours(gt_kernel, [kernel_bboxes[i]], -1, 1, -1)
             gt_kernels.append(gt_kernel)
 
+        #transform
         if self.is_transform:
             imgs = [img, gt_instance, training_mask]
             imgs.extend(gt_kernels)
@@ -400,15 +519,16 @@ class PAN_PP_IC15(data.Dataset):
             imgs = random_rotate(imgs)
             gt_instance_before_crop = imgs[1].copy()
             imgs = random_crop_padding(imgs, self.img_size)
-            img, gt_instance, training_mask, gt_kernels = imgs[0], imgs[
-                1], imgs[2], imgs[3:]
+            img, gt_instance, training_mask, gt_kernels = imgs[0], imgs[1], imgs[2], imgs[3:]
+            #update word and mask because transformation can lose box
             word_mask = update_word_mask(gt_instance, gt_instance_before_crop,
                                          word_mask)
-
+        
         gt_text = gt_instance.copy()
         gt_text[gt_text > 0] = 1
         gt_kernels = np.array(gt_kernels)
 
+        #get bounding box after transformation
         max_instance = np.max(gt_instance)
         gt_bboxes = np.zeros((self.max_word_num + 1, 4), dtype=np.int32)
         for i in range(1, max_instance + 1):
@@ -474,3 +594,17 @@ class PAN_PP_IC15(data.Dataset):
             return self.prepare_train_data(index)
         elif self.split == 'test':
             return self.prepare_test_data(index)
+
+
+# input --image
+#       --bboxes
+#       --instance mask
+#       --annotation
+
+# out   --Image
+#       --bboxes 
+#       --text_mask (for dectection)
+#       --instance_mask (for recognition)
+#       --kernels_mask (like anchor or bezier method)
+#       --gt_word (after embding)
+#       --word_mask (?)

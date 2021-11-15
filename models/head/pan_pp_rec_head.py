@@ -5,6 +5,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+#for generate dict
+import operator
+from dict_trie import Trie
+from editdistance import eval
+
 from ..loss import acc
 from ..post_processing import BeamSearch
 
@@ -36,6 +41,9 @@ class PAN_PP_RecHead(nn.Module):
         self.encoder = Encoder(hidden_dim, voc, char2id, id2char)
         self.decoder = Decoder(hidden_dim, hidden_dim, 2, voc, char2id,
                                id2char)
+
+        self.dictionary = open("vn_dictionary.txt").read().replace("\n\n", "\n").split("\n")
+        self.trie = Trie(self.dictionary)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -77,6 +85,7 @@ class PAN_PP_RecHead(nn.Module):
         bboxes[:, :, (0, 2)] = bboxes[:, :, (0, 2)].clamp(0, H)
         bboxes[:, :, (1, 3)] = bboxes[:, :, (1, 3)].clamp(0, W)
 
+        #x.size(0) is batch_size
         for i in range(x.size(0)):
             instance_ = instance[i:i + 1]
             if unique_labels is None:
@@ -126,9 +135,160 @@ class PAN_PP_RecHead(nn.Module):
             words = None
         return x_crops, words
 
+    def decode(self,rec):
+        s = ""
+        for c in rec:
+            c = int(c)
+            if c < 104:
+                s += self.id2char[c]
+            # elif c == 104:
+            #     s += u'口'
+
+        return s
+    
+    def encode(self,s):
+        word=[]
+        for c in s:
+            word.append(self.char2id[c])
+
+        while len(word) < 32:
+            word.append(104)
+        
+        word = word[:32]
+        return word
+
+
+    def generate_dict(self,targets,maxlen=1):
+        
+        if self.training:
+            pass
+            target_candidates = []
+            distance_candidates = []
+            #beziers = [p.beziers for p in targets]
+            targets = torch.cat([x.text for x in targets], dim=0)
+            for target in targets:
+                rec = target.cpu().detach().numpy()
+                rec = decode(rec)
+
+                # candidates = {}
+                # candidates[rec] = 0
+                # for word in self.dictionary:
+                #     candidates[word] = eval(rec, word)
+                # candidates = sorted(candidates.items(), key=operator.itemgetter(1))[:10]
+
+                candidates_list = list(self.trie.all_levenshtein(rec, 1))
+                candidates_list.append(rec)
+                candidates_list = list(set(candidates_list))
+                candidates = {}
+                for candidate in candidates_list:
+                    candidates[candidate] = eval(rec, candidate)
+                candidates = sorted(candidates.items(), key=operator.itemgetter(1))
+                dist_sharp = eval("###", rec)
+                while len(candidates) < 10:
+                    candidates.append(("###", dist_sharp))
+                candidates = candidates[:10]
+
+                candidates_encoded = []
+                distance_can = []
+                for can in candidates:
+                    word = encode(can[0])
+                    
+                    candidates_encoded.append(word)
+                    distance_can.append(1 / (can[1] + 0.1))
+                # distance_can = softmax(distance_can)
+
+                distance_candidates.append(distance_can)
+                target_candidates.append(candidates_encoded)
+
+            distance_candidates = torch.Tensor(distance_candidates).to(device="cuda")
+            # distance_candidates = torch.sum(distance_candidates, dim=0)
+            # distance_candidates = nn.functional.log_softmax(distance_candidates, dim=0)
+
+            target_candidates = torch.Tensor(target_candidates).to(device="cuda")
+            # distance_candidates = torch.Tensor(distance_candidates).to(device='cuda')
+            targets = target_candidates
+            targets = targets.permute((1, 0, 2))
+            targets = {"targets": targets, "scores": distance_candidates}
+
+            return targets
+        else:
+            target_candidates = []
+
+            distance_candidates = []
+            for target in targets:
+                rec = target.cpu().detach().numpy()
+                rec = decode(rec)
+                candidates = {}
+                for word in self.dictionary:
+                    candidates[word] = eval(rec, word)
+                candidates = sorted(candidates.items(), key=operator.itemgetter(1))[: maxlen]
+                candidates_encoded = []
+                distance_can = []
+                for can in candidates:
+                    word = encode(can[0])
+                    candidates_encoded.append(word)
+
+                target_candidates.append(candidates_encoded)
+
+            target_candidates = torch.Tensor(target_candidates).to(device="cuda")
+            targets = target_candidates
+
+            return targets
+            
+
+    def loss_unit(self, inputs, targets, reduce=True):
+        
+        loss_total=0 
+        scores  = targets["scores"]
+        targets = targets["targets"]
+        total_acc=0.0
+        output = []
+        for idx in range(target.size(0)):
+            input= inputs[idx]
+            target= targets[idx]
+
+            EPS = 1e-6
+            N, L, D = input.size()  #inputs.shape: ( number, 32, max_len_vocab ) || targets.shape: ( number, 32 )
+            mask = target != self.char2id['PAD']
+            input = input.contiguous().view(-1, D)
+            target = target.contiguous().view(-1)
+            loss_rec = F.cross_entropy(input, target, reduce=False)
+            loss_rec = loss_rec.view(N, L)
+            
+            loss_rec = torch.sum(loss_rec * mask.float(),
+                                dim=1) / (torch.sum(mask.float(), dim=1) + EPS)
+            acc_rec = acc(torch.argmax(input, dim=1).view(N, L),
+                        target.view(N, L),
+                        mask,
+                        reduce=False)
+            if reduce:
+                loss_rec = torch.mean(loss_rec)*32  # [valid]
+                acc_rec = torch.mean(acc_rec)
+            
+            output.append(1/loss_rec)
+
+            if idx==0:
+                loss_total+= loss_rec
+                total_acc+=  acc_rec
+            
+
+        output = torch.Tensor(output).to(device="cuda")
+        output = nn.functional.softmax(output, dim=0)
+        scores = torch.mean(scores, dim=0)
+        scores = nn.functional.softmax(scores, dim=0)
+        output = torch.unsqueeze(output, dim=0).to(device="cuda")
+        scores = torch.unsqueeze(scores, dim=0).to(device="cuda")
+        loss_total += nn.KLDivLoss(reduction="batchmean")(output, scores)
+
+        
+        losses = {'loss_rec': loss_total*0.04, 'acc_rec': total_acc}
+        return losses
+
+
     def loss(self, input, target, reduce=True):
+
         EPS = 1e-6
-        N, L, D = input.size()
+        N, L, D = input.size()  #inputs.shape: ( number, 32, max_len_vocab ) || targets.shape: ( number, 32 )
         mask = target != self.char2id['PAD']
         input = input.contiguous().view(-1, D)
         target = target.contiguous().view(-1)
@@ -147,11 +307,22 @@ class PAN_PP_RecHead(nn.Module):
 
         return losses
 
-    def forward(self, x, target=None):
+
+
+
+
+    def forward(self, x, targets=None):
         holistic_feature = self.encoder(x)
 
         if self.training:
-            return self.decoder(x, holistic_feature, target)
+            out=[]
+            targets_candidates= targets['targets']
+            for i in range(target.size(0)):
+                target= targets_candidates[i]
+                out.append(
+                                self.decoder(x, holistic_feature, target)
+                )
+            return out
         else:
             if self.beam_size <= 1:
                 return self.decoder.forward_test(x, holistic_feature)
@@ -180,10 +351,10 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, featrue_dim, hidden_dim, num_layers, voc, char2id,
+    def __init__(self, feature_dim, hidden_dim, num_layers, voc, char2id,
                  id2char):
         super(Decoder, self).__init__()
-        self.featrue_dim = featrue_dim
+        self.feature_dim = feature_dim
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.vocab_size = len(voc)
@@ -197,8 +368,11 @@ class Decoder(nn.Module):
         self.emb = nn.Embedding(self.vocab_size, self.hidden_dim)
 
         self.att = MultiHeadAttentionLayer(self.hidden_dim, 8)
-        self.cls = nn.Linear(self.hidden_dim + self.featrue_dim,
+        self.cls = nn.Linear(self.hidden_dim + self.feature_dim,
                              self.vocab_size)
+
+        self.dictionary = open("vn_dictionary.txt").read().replace("\n\n", "\n").split("\n")
+        self.trie = Trie(self.dictionary)
 
     def forward(self, x, holistic_feature, target):
         # print(x.shape, holistic_feature.shape, target.shape)
@@ -243,29 +417,186 @@ class Decoder(nn.Module):
             out[:, t, :] = out_t
         return out[:, 1:, :]
 
-    def to_words(self, seqs, seq_scores=None):
-        EPS = 1e-6
-        words = []
-        word_scores = None
-        if seq_scores is not None:
-            word_scores = []
+    def decode(self,rec):
+        s = ""
+        for c in rec:
+            c = int(c)
+            if c < 104:
+                s += self.id2char[c]
+            # elif c == 104:
+            #     s += u'口'
 
-        for i in range(len(seqs)):
-            word = ''
-            word_score = 0
-            for j, char_id in enumerate(seqs[i]):
-                char_id = int(char_id)
-                if char_id == self.END_TOKEN:
-                    break
-                if self.id2char[char_id] in ['PAD', 'UNK']:
-                    continue
-                word += self.id2char[char_id]
-                if seq_scores is not None:
-                    word_score += seq_scores[i, j]
-            words.append(word)
+        return s
+    
+    def encode(self, s):
+        word=[]
+        for c in s:
+            word.append(self.char2id[c])
+
+        while len(word) < 32:
+            word.append(104)
+        
+        word = word[:32]
+        return word
+
+    def generate_dict(targets,maxlen=1):
+        
+        if self.training:
+            pass
+            target_candidates = []
+            distance_candidates = []
+            #beziers = [p.beziers for p in targets]
+            targets = torch.cat([x.text for x in targets], dim=0)
+            for target in targets:
+                rec = target.cpu().detach().numpy()
+                rec = decode(rec)
+
+                # candidates = {}
+                # candidates[rec] = 0
+                # for word in self.dictionary:
+                #     candidates[word] = eval(rec, word)
+                # candidates = sorted(candidates.items(), key=operator.itemgetter(1))[:10]
+
+                candidates_list = list(self.trie.all_levenshtein(rec, 1))
+                candidates_list.append(rec)
+                candidates_list = list(set(candidates_list))
+                candidates = {}
+                for candidate in candidates_list:
+                    candidates[candidate] = eval(rec, candidate)
+                candidates = sorted(candidates.items(), key=operator.itemgetter(1))
+                dist_sharp = eval("###", rec)
+                while len(candidates) < 10:
+                    candidates.append(("###", dist_sharp))
+                candidates = candidates[:10]
+
+                candidates_encoded = []
+                distance_can = []
+                for can in candidates:
+                    word = encode(can[0])
+                    
+                    candidates_encoded.append(word)
+                    distance_can.append(1 / (can[1] + 0.1))
+                # distance_can = softmax(distance_can)
+
+                distance_candidates.append(distance_can)
+                target_candidates.append(candidates_encoded)
+
+            distance_candidates = torch.Tensor(distance_candidates).to(device="cuda")
+            # distance_candidates = torch.sum(distance_candidates, dim=0)
+            # distance_candidates = nn.functional.log_softmax(distance_candidates, dim=0)
+
+            target_candidates = torch.Tensor(target_candidates).to(device="cuda")
+            # distance_candidates = torch.Tensor(distance_candidates).to(device='cuda')
+            targets = target_candidates
+            targets = targets.permute((1, 0, 2))
+            targets = {"targets": targets, "scores": distance_candidates}
+
+            return targets
+        else:
+            target_candidates = []
+
+            #distance_candidates = []
+            for target in targets:
+                rec = target.cpu().detach().numpy()
+                rec = decode(rec)
+                candidates = {}
+                for word in self.dictionary:
+                    candidates[word] = eval(rec, word)                                     #len: maxlen(1)
+                candidates = sorted(candidates.items(), key=operator.itemgetter(1))[: maxlen]  #dict: [word: distance] 
+                candidates_encoded = []
+                #distance_can = []
+                for can in candidates:
+                    word = encode(can[0])  #list | len= 32
+                    candidates_encoded.append(word)                 #word is always correct *not meaning == ground truth
+                #candidates_encoded : list | len = 1 or maxlen
+
+                target_candidates.append(candidates_encoded)
+
+            #target_candidates: list[ list(candidates_encoded: list(word: len=32) | len= maxlen ), list, ...]  len = batch_size
+
+            target_candidates = torch.Tensor(target_candidates).to(device="cuda")
+            
+            #target_candidates: Tensor [batch_size, maxlen(1), 32] 
+
+            targets = target_candidates.permute(1,0,2)
+            
+            #targets : Tensor [maxlen(1), batch_size, 32]  
+            
+
+            return targets  
+
+    def to_words(self, seqs, seq_scores=None,decoder_raw=None,n=None):
+
+        #seqs: [batch, 32],   seq_scores[batch, 32]
+
+        if decoder_raw is None:
+            EPS = 1e-6
+            words = []
+            word_scores = None
             if seq_scores is not None:
-                word_scores.append(word_score / (len(word) + EPS))
-        return words, word_scores
+                word_scores = []
+
+            for i in range(len(seqs)):
+                word = ''
+                word_score = 0
+                for j, char_id in enumerate(seqs[i]):
+                    char_id = int(char_id)
+                    if char_id == self.END_TOKEN:
+                        break
+                    if self.id2char[char_id] in ['PAD', 'UNK']:
+                        continue
+                    word += self.id2char[char_id]
+                    if seq_scores is not None:
+                        word_score += seq_scores[i, j]
+                words.append(word)
+                if seq_scores is not None:
+                    word_scores.append(word_score / (len(word) + EPS))
+            return words, word_scores
+
+        else:
+            decodes =seqs
+            targets = self.generate_dict(decodes)
+
+            decodes = torch.zeros((n, self.attention.max_len))
+            prob = 1.0
+            for i in range(n):
+                losses = []
+                decode_candidates = torch.zeros((self.num_candidates, self.attention.max_len))
+                target_i = targets[i]
+                for j in range(self.num_candidates):
+                    loss = 0.0
+                    decoder_input = torch.zeros(1).long().to(rois.device)
+                    decoder_hidden = self.attention.initHidden(1).to(rois.device)
+                    for k in range(self.attention.max_len):
+                        loss += self.criterion(
+                            torch.unsqueeze(decoder_raw[i, k, :], 0), torch.unsqueeze(target_i[j, k].long(), 0)
+                        )
+                    losses.append(loss.to(device='cpu'))
+                min_id = np.argmin(losses)
+                decodes[i, :] = target_candidates[i, min_id, :]
+            
+            probs=[]
+            for idx in targets.size(0):
+                target_i = targets[idx]     #shape: [ batch_size, 32 ]
+
+                decoder_raw                 #shape: [ batch_size, 32, 106]
+
+                prob = F.cross_entropy(decoder_raw.view(-1,106), target.view(-1), reduce=False)
+                
+                prob = prob.view(n, 32)
+                prob = torch.sum(prob * mask.float(),
+                                dim=1) / (torch.sum(mask.float(), dim=1) + EPS)
+                
+                if reduce:
+                    loss_rec = torch.mean(loss_rec)*32  # [valid]
+                    acc_rec = torch.mean(acc_rec)
+
+            
+            return decodes, None
+
+
+
+
 
     def forward_test(self, x, holistic_feature):
         batch_size, feature_dim, H, W = x.size()
@@ -278,7 +609,10 @@ class Decoder(nn.Module):
                          self.START_TOKEN,
                          dtype=torch.long)
         seq_score = x.new_zeros((batch_size, max_seq_len + 1),
-                                dtype=torch.float32)
+                                dtype=torch.float32) 
+
+        decoder_raw = torch.zeros((batch_size, max_seq_len, 106)).to(x.device)
+        
         end = x.new_ones((batch_size, ), dtype=torch.uint8)
         for t in range(max_seq_len + 1):
             if t == 0:
@@ -297,8 +631,12 @@ class Decoder(nn.Module):
             if t == 0:
                 continue
             out_t, _ = self.att(ht, x_flatten, x_flatten)
-            out_t = torch.cat((out_t, ht), dim=1)
-            score = torch.softmax(self.cls(out_t), dim=1)
+            out_t = torch.cat((out_t, ht), dim=1) 
+            
+            out_t = self.cls(out_t)
+            decoder_raw[:,t-1,:] = out_t
+
+            score = torch.softmax(out_t, dim=1)
             score, idx = torch.max(score, dim=1)
             seq[:, t] = idx
             seq_score[:, t] = score
@@ -306,7 +644,7 @@ class Decoder(nn.Module):
             if torch.sum(end) == 0:
                 break
 
-        words, word_scores = self.to_words(seq[:, 1:], seq_score[:, 1:])
+        words, word_scores = self.to_words(seq[:, 1:], seq_score[:, 1:], decoder_raw,batch_size)
 
         return words, word_scores
 
