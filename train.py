@@ -159,13 +159,13 @@ def save_checkpoint(state, checkpoint_path, cfg):
 def reuse_pretrained(models,state_dict):
 
     print("Loading pretrained...")
-    print("Ignore head_rec layers!\n-----------------------------")
+    print("Ignore head_rec layers because language pretrained != model!\n-----------------------------")
     for name, params in models.state_dict().items():
     
         if not 'rec' in name:
             
             models.state_dict()[name].copy_(state_dict[name])
-            print("Loaded params into {}!".format(name))
+            #print("Loaded params into {}!".format(name))
         
 
 

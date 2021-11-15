@@ -136,6 +136,8 @@ def get_ann(img, gt_path):
         word= gt[8] if len(gt) ==9 else ','.join(gt[8:])
         word = word.replace('\r', '').replace('\n', '')
         word = full_parse(word)
+        if len(word)==0:
+            word ="###"
         if word[0] == '#':
             words.append('###')
         else:
@@ -423,6 +425,8 @@ class PAN_PP_IC15(data.Dataset):
                 self.gt_paths.extend(gt_paths)
 
             count+=1
+
+        print("Found {} image and ground truth!".format(len(self.img_paths)))
 
         if report_speed:
             target_size = 3000

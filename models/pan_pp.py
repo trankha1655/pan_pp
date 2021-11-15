@@ -123,7 +123,7 @@ class PAN_PP(nn.Module):
 
                     out_rec = self.rec_head(x_crops, gt_words) 
                     
-                    loss_rec = self.rec_head.loss(out_rec,
+                    loss_rec = self.rec_head.loss_unit(out_rec,
                                                   gt_words,
                                                   reduce=False)
                 else:

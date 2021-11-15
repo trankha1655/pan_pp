@@ -245,7 +245,7 @@ class PAN_PP_RecHead(nn.Module):
         output = []
         for idx in range(targets.size(0)):
             input= inputs[idx]
-            target= targets[idx]
+            target= targets[idx].to('cuda')
 
             EPS = 1e-6
             N, L, D = input.size()  #inputs.shape: ( number, 32, max_len_vocab ) || targets.shape: ( number, 32 )
@@ -272,17 +272,32 @@ class PAN_PP_RecHead(nn.Module):
                 total_acc+=  acc_rec
             
 
-        scores = scores.to("cuda")
-        output = torch.Tensor(output).to(device="cuda")
+        
+        output = torch.stack(output)
+
+        #print("list loss: ", output)
+        
+        #output = torch.Tensor(output).to(device="cuda")
         output = nn.functional.softmax(output, dim=0)
+        #print("dist_BF:", scores)
+        #scores = [scores.T]*output.size(1)
+        #scores = torch.stack(scores).T
+        scores = scores.permute(1,0)
+        scores = scores.to("cuda")
         scores = torch.mean(scores, dim=0)
         scores = nn.functional.softmax(scores, dim=0)
+        #print("dist:", scores)
+        
         output = torch.unsqueeze(output, dim=0).to(device="cuda")
         scores = torch.unsqueeze(scores, dim=0).to(device="cuda")
-        loss_total += nn.KLDivLoss(reduction="batchmean")(output, scores)
-
+        temp = nn.KLDivLoss(reduce=False)(output, scores)
         
-        losses = {'loss_rec': loss_total*0.04, 'acc_rec': total_acc}
+        #print("KLDLoss: ", temp.shape, temp)
+
+        loss_total += torch.squeeze(torch.mean(temp, dim=1))
+        #print("total", loss_total)
+        #print(K)
+        losses = {'loss_rec': loss_total, 'acc_rec': total_acc}
         return losses
 
 
@@ -319,10 +334,10 @@ class PAN_PP_RecHead(nn.Module):
             out=[]
             
             targets_candidates= targets['targets'] 
-            print('FULLdata', targets_candidates.shape)
+            #print('FULLdata', targets_candidates.shape)
             for i in range(targets_candidates.size(0)):
                 target= targets_candidates[i]
-                print("forwardHEAD", target.shape)
+                #print("forwardHEAD", target.shape)
                 out.append(
                                 self.decoder(x, holistic_feature, target)
                 )
@@ -396,7 +411,7 @@ class Decoder(nn.Module):
         out = x.new_zeros((x.size(0), max_seq_len + 1, self.vocab_size),
                           dtype=torch.float32)
         for t in range(max_seq_len + 1):
-            print('char: ',t)
+            #print('char: ',t)
             if t == 0:
                 xt = holistic_feature
             elif t == 1:
@@ -406,7 +421,7 @@ class Decoder(nn.Module):
                 xt = self.emb(it)
             else:
                 it = target[:, t - 2]
-                print("IT", it)
+                #print("IT", it)
                 xt = self.emb(it)
 
             for i in range(self.num_layers):
