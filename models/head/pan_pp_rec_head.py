@@ -142,7 +142,7 @@ class PAN_PP_RecHead(nn.Module):
         word=""  
         for char_id in rec:
             char_id = int(char_id)
-            if char_id > len(voc) -1: 
+            if char_id > len(self.voc) -1: 
                 continue
             if char_id == self.char2id['EOS']:
                 break
@@ -322,6 +322,18 @@ class PAN_PP_RecHead(nn.Module):
 
         return losses
 
+    def temp_forward(self, x, target=None):
+        holistic_feature = self.encoder(x)
+
+        if self.training:
+            return self.decoder(x, holistic_feature, target)
+        else:
+            if self.beam_size <= 1:
+                return self.decoder.forward_test(x, holistic_feature)
+            else:
+                return self.decoder.beam_search(x,
+                                                holistic_feature,
+                                                beam_size=self.beam_size)
 
 
 
@@ -672,7 +684,7 @@ class Decoder(nn.Module):
         #words1, word_scores1 = self.to_words_ori( seq[:,1:], seq_score[:,1:]) 
         
         words, word_scores = self.to_words(seq[:, 1:], seq_score[:, 1:], decoder_raw[:,1:,],batch_size)
-        #print('before: ', words1)
+        #print('before: ', words)
         #print('after:', words)
 
         return words, word_scores
