@@ -134,7 +134,7 @@ def get_ann(img, gt_path):
         line = line.replace('\xef\xbb\xbf', '')
         gt = line.split(',')
         word= gt[8] if len(gt) ==9 else ','.join(gt[8:])
-        word = word.replace('\r', '').replace('\n', '')
+        word = word.replace('\r', '').replace('\n', '').replace(' ', '')
         word = full_parse(word)
         if len(word)==0:
             word ="###"
@@ -426,7 +426,7 @@ class PAN_PP_IC15(data.Dataset):
 
             count+=1
 
-        print("Found {} image and ground truth!".format(len(self.img_paths)))
+        print("Found {} image and ground truth in {} set!".format(len(self.img_paths, split)))
 
         if report_speed:
             target_size = 3000

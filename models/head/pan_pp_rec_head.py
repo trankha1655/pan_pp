@@ -380,6 +380,7 @@ class Decoder(nn.Module):
         self.START_TOKEN = char2id['EOS']
         self.END_TOKEN = char2id['EOS']
         self.NULL_TOKEN = char2id['PAD']
+        self.char2id = char2id
         self.id2char = id2char
         self.lstm_u = nn.ModuleList()
         for i in range(self.num_layers):
@@ -462,7 +463,7 @@ class Decoder(nn.Module):
         word = word[:32]
         return word
 
-    def generate_dict(targets,maxlen=1):
+    def generate_dict(self,targets,maxlen=1):
         
         if self.training:
             pass
@@ -527,17 +528,22 @@ class Decoder(nn.Module):
                     candidates[word] = eval(rec, word)                                     #len: maxlen(1)
                 candidates = sorted(candidates.items(), key=operator.itemgetter(1))[: maxlen]  #dict: [word: distance] 
                 candidates_encoded = []
+                candidates_score = []
                 #distance_can = []
                 for can in candidates:
                     word = self.encode(can[0])  #list | len= 32
-                    candidates_encoded.append(word)                 #word is always correct *not meaning == ground truth
+                    candidates_encoded.append(word)
+
+                    candidates_score.append(can[1])   # [n, maxlen]
+                                     #word is always correct *not meaning == ground truth
                 #candidates_encoded : list | len = 1 or maxlen
 
                 target_candidates.append(candidates_encoded)
 
             #target_candidates: list[ list(candidates_encoded: list(word: len=32) | len= maxlen ), list, ...]  len = batch_size
 
-            target_candidates = torch.Tensor(target_candidates).to(device="cuda")
+            target_candidates = torch.LongTensor(target_candidates)
+            candidates_score  = torch.Tensor(candidates_score)
             
             #target_candidates: Tensor [batch_size, maxlen(1), 32] 
 
@@ -546,16 +552,22 @@ class Decoder(nn.Module):
             #targets : Tensor [maxlen(1), batch_size, 32]  
             
 
-            return targets  
+            return targets, candidates_score
 
     def to_words(self, seqs, seq_scores=None,decoder_raw=None,n=None,num_candidates=1):
 
         #seqs: [batch, 32],   seq_scores[batch, 32]
+        EPS = 1e-6
+        words = []
+        word_scores = None
+        #seq_scores = None
+        if seq_scores is not None:
+            word_scores = []
 
         
         if decoder_raw is not None:
             decodes =seqs
-            targets = self.generate_dict(decodes)
+            targets, scores = self.generate_dict(decodes)
 
             decodes = torch.zeros((n, self.attention.max_len))
             prob = 1.0
@@ -566,48 +578,41 @@ class Decoder(nn.Module):
                 for j in range(num_candidates):
                     loss = 0.0
                     
-                    input= decoder_raw[idx]
-                    target= targets[idx].to('cuda')
+                    input= decoder_raw[i]
+                    target= target_i[j].to('cuda')
 
                     EPS = 1e-6
-                    N, L, D = input.size()  #inputs.shape: ( number, 32, max_len_vocab ) || targets.shape: ( number, 32 )
-                    mask = target_i != self.char2id['PAD']
+                    L, D = input.size()  #inputs.shape: ( number, 32, max_len_vocab ) || targets.shape: ( number, 32 )
+                    mask = target != self.char2id['PAD']
                     input = input.contiguous().view(-1, D)
-                    target_i = target_i.contiguous().view(-1)
+                    target = target.contiguous().view(-1)
                     loss_rec = F.cross_entropy(input, target, reduce=False)
-                    loss_rec = loss_rec.view(N, L)
+                    loss_rec = loss_rec.view(L)
                     
-                    loss_rec = torch.sum(loss_rec * mask.float(),
-                                        dim=1) / (torch.sum(mask.float(), dim=1) + EPS)
+                    loss_rec = torch.sum(loss_rec * mask.float()
+                                        ) / (torch.sum(mask.float()) + EPS)
                     
                     if True:
                         loss_rec = torch.mean(loss_rec)   # [valid]
                         #acc_rec = torch.mean(acc_rec)
                     
-                    loss_rec.append(loss_rec)
+                    losses.append(loss_rec.to(device='cpu'))
 
-
-                    for k in range(self.attention.max_len):
-                        loss += self.criterion(
-                            torch.unsqueeze(decoder_raw[i, k, :], 0), torch.unsqueeze(target_i[j, k].long(), 0)
-                        )
-                    losses.append(loss.to(device='cpu'))
                 min_id = np.argmin(losses)
-                decodes[i, :] = target[i, min_id, :]
+                decodes[i, :] = targets[i, min_id, :]
+                
+
+
+
             
             seqs = decodes
-            seq_scores = None
+            #seq_scores = None
         
         
         
             
         
-        EPS = 1e-6
-        words = []
-        word_scores = None
-        #seq_scores = None
-        if seq_scores is not None:
-            word_scores = []
+        
 
         for i in range(len(seqs)):
             word = ''
@@ -620,7 +625,7 @@ class Decoder(nn.Module):
                     continue
                 word += self.id2char[char_id]
                 if seq_scores is not None:
-                    word_score += seq_scores[i, j]
+                    word_score += decoder_raw[i, j,char_id]
             words.append(word)
             if seq_scores is not None:
                 word_scores.append(word_score / (len(word) + EPS))
