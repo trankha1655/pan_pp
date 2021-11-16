@@ -57,7 +57,6 @@ def report_speed(outputs, speed_meters):
 
 
 def test(test_loader, model, cfg):
-    print("In testing function process!")
     model.eval()
 
     with_rec = hasattr(cfg.model, 'recognition_head')
@@ -74,7 +73,6 @@ def test(test_loader, model, cfg):
                             total_time=AverageMeter(500))
 
     for idx, data in enumerate(test_loader):
-        #print("Why not print?")
         print('Testing %d/%d\r' % (idx, len(test_loader)), flush=True, end='')
     
         # prepare input
@@ -125,36 +123,17 @@ def main(args):
 
     if args.checkpoint is not None:
         if os.path.isfile(args.checkpoint):
-            if hasattr(cfg.model, 'recognition_head') and \
-                cfg.model.recognition_head.lang =='VN' and \
-                    not cfg.train_cfg.lang_pretrain=="VN":
+            print("Loading model and optimizer from checkpoint '{}'".format(
+                args.checkpoint))
+            sys.stdout.flush()
 
-                print("Loading model and optimizer from checkpoint '{}'".format(
-                    args.checkpoint))
-                sys.stdout.flush()
+            checkpoint = torch.load(args.checkpoint)
 
-                checkpoint = torch.load(args.checkpoint)
-
-                d = dict()
-                for key, value in checkpoint['state_dict'].items():
-                    if 'rec' in key:
-                        continue
-                    tmp = key[7:]
-                    d[tmp] = value
-                model.load_state_dict(d)
-            else:
-                print("Loading model and optimizer from checkpoint '{}'".format(
-                    args.checkpoint))
-                sys.stdout.flush()
-
-                checkpoint = torch.load(args.checkpoint)
-
-                d = dict()
-                for key, value in checkpoint['state_dict'].items():
-                    tmp = key[7:]
-                    d[tmp] = value
-                model.load_state_dict(d)
-
+            d = dict()
+            for key, value in checkpoint['state_dict'].items():
+                tmp = key[7:]
+                d[tmp] = value
+            model.load_state_dict(d)
         else:
             print("No checkpoint found at '{}'".format(args.resume))
             raise

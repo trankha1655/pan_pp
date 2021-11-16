@@ -85,7 +85,6 @@ class PAN_PP_RecHead(nn.Module):
         bboxes[:, :, (0, 2)] = bboxes[:, :, (0, 2)].clamp(0, H)
         bboxes[:, :, (1, 3)] = bboxes[:, :, (1, 3)].clamp(0, W)
 
-        #x.size(0) is batch_size
         for i in range(x.size(0)):
             instance_ = instance[i:i + 1]
             if unique_labels is None:
@@ -135,8 +134,6 @@ class PAN_PP_RecHead(nn.Module):
             words = None
         return x_crops, words
 
-    
-
     def decode(self,rec):
         
         #convert number to string
@@ -145,7 +142,7 @@ class PAN_PP_RecHead(nn.Module):
         word=""  
         for char_id in rec:
             char_id = int(char_id)
-            if char_id > 106: 
+            if char_id > len(voc) -1: 
                 continue
             if char_id == self.char2id['EOS']:
                 break
@@ -153,16 +150,15 @@ class PAN_PP_RecHead(nn.Module):
                 continue
             
             word += self.id2char[char_id]
-            
         
-        
-        return word, 
+
+        return word 
     
     def encode(self,s):
 
         #convert string to number
 
-        word= np.full((32, ),
+        rec= np.full((32, ),
                               self.char2id['PAD'],
                               dtype=np.int)
 
@@ -170,17 +166,17 @@ class PAN_PP_RecHead(nn.Module):
             if j > 32 - 1:
                 break
             if char in self.char2id:
-                word[j] = self.char2id[char]
+                rec[j] = self.char2id[char]
             else:
-                word[j] = self.char2id['UNK']
+                rec[j] = self.char2id['UNK']
 
-        if len(s) > 32 - 1:
-            word[-1] = self.char2id['EOS']
+        if len(s) > 31:
+            rec[-1] = self.char2id['EOS']
         else:
-            word[len(s)] = self.char2id['EOS']
+            rec[len(s)] = self.char2id['EOS']
 
         
-        return word
+        return rec
 
 
     def generate_dict(self,targets,maxlen=1):
@@ -212,7 +208,7 @@ class PAN_PP_RecHead(nn.Module):
             while len(candidates) < 10:
                 candidates.append(("###", dist_sharp))
             candidates = candidates[:10]
-
+            #print(candidates)
             candidates_encoded = []
             distance_can = []
             for can in candidates:
@@ -462,7 +458,7 @@ class Decoder(nn.Module):
             word += self.id2char[char_id]
             
 
-        return word, 
+        return word
     
     def encode(self,s):
 
@@ -640,7 +636,7 @@ class Decoder(nn.Module):
         seq_score = x.new_zeros((batch_size, max_seq_len + 1),
                                 dtype=torch.float32) 
 
-        decoder_raw = torch.zeros((batch_size, max_seq_len, 106)).to(x.device)
+        decoder_raw = torch.zeros((batch_size, max_seq_len+1, self.vocab_size)).to(x.device)
         
         end = x.new_ones((batch_size, ), dtype=torch.uint8)
         for t in range(max_seq_len + 1):
@@ -675,7 +671,7 @@ class Decoder(nn.Module):
 
         #words1, word_scores1 = self.to_words_ori( seq[:,1:], seq_score[:,1:]) 
         
-        words, word_scores = self.to_words(seq[:, 1:], seq_score[:, 1:], decoder_raw,batch_size)
+        words, word_scores = self.to_words(seq[:, 1:], seq_score[:, 1:], decoder_raw[:,1:,],batch_size)
         #print('before: ', words1)
         #print('after:', words)
 

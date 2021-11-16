@@ -409,7 +409,7 @@ class PAN_PP_IC15(data.Dataset):
 
                 self.img_paths.extend(img_paths)
                 self.gt_paths.extend(gt_paths)
-                print("Found {} in folder {}".format(len(img_paths), count)
+                print("Found {} in folder {}".format(len(img_paths), count))
             else:
                 for idx, img_name in enumerate(img_names): 
                     
@@ -424,7 +424,7 @@ class PAN_PP_IC15(data.Dataset):
 
                 self.img_paths.extend(img_paths)
                 self.gt_paths.extend(gt_paths)
-                print("Found {} in folder {}".format(len(img_paths), count)
+                print("Found {} in folder {}".format(len(img_paths), count))
 
             count+=1
 
