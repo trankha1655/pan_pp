@@ -373,8 +373,8 @@ class PAN_PP_IC15(data.Dataset):
             data_dirs = [ic15_train_data_dir, vin_train_data_dir]
             gt_dirs = [ic15_train_gt_dir, vin_train_gt_dir]
         elif split == 'test':
-            data_dirs = [ic15_test_data_dir]
-            gt_dirs = [ic15_test_gt_dir]
+            data_dirs = [ic15_test_data_dir, vin_test_data_dir]
+            gt_dirs = [ic15_test_gt_dir, vin_test_gt_dir]
         else:
             print('Error: split must be train or test!')
             raise
@@ -409,6 +409,7 @@ class PAN_PP_IC15(data.Dataset):
 
                 self.img_paths.extend(img_paths)
                 self.gt_paths.extend(gt_paths)
+                print("Found {} in folder {}".format(len(img_paths), count)
             else:
                 for idx, img_name in enumerate(img_names): 
                     
@@ -423,10 +424,11 @@ class PAN_PP_IC15(data.Dataset):
 
                 self.img_paths.extend(img_paths)
                 self.gt_paths.extend(gt_paths)
+                print("Found {} in folder {}".format(len(img_paths), count)
 
             count+=1
 
-        print("Found {} image and ground truth in {} set!".format(len(self.img_paths, split)))
+        print("Found total {} image and ground truth in {} set!".format(len(self.img_paths), split))
 
         if report_speed:
             target_size = 3000

@@ -74,7 +74,7 @@ def test(test_loader, model, cfg):
                             total_time=AverageMeter(500))
 
     for idx, data in enumerate(test_loader):
-        print("Why not print?")
+        #print("Why not print?")
         print('Testing %d/%d\r' % (idx, len(test_loader)), flush=True, end='')
     
         # prepare input

@@ -528,13 +528,13 @@ class Decoder(nn.Module):
                     candidates[word] = eval(rec, word)                                     #len: maxlen(1)
                 candidates = sorted(candidates.items(), key=operator.itemgetter(1))[: maxlen]  #dict: [word: distance] 
                 candidates_encoded = []
-                candidates_score = []
+                #candidates_score = []
                 #distance_can = []
                 for can in candidates:
                     word = self.encode(can[0])  #list | len= 32
                     candidates_encoded.append(word)
 
-                    candidates_score.append(can[1])   # [n, maxlen]
+                    #candidates_score.append(can[1])   # [n, maxlen]
                                      #word is always correct *not meaning == ground truth
                 #candidates_encoded : list | len = 1 or maxlen
 
@@ -543,7 +543,7 @@ class Decoder(nn.Module):
             #target_candidates: list[ list(candidates_encoded: list(word: len=32) | len= maxlen ), list, ...]  len = batch_size
 
             target_candidates = torch.LongTensor(target_candidates)
-            candidates_score  = torch.Tensor(candidates_score)
+            #candidates_score  = torch.Tensor(candidates_score)
             
             #target_candidates: Tensor [batch_size, maxlen(1), 32] 
 
@@ -552,7 +552,7 @@ class Decoder(nn.Module):
             #targets : Tensor [maxlen(1), batch_size, 32]  
             
 
-            return targets, candidates_score
+            return target_candidates
 
     def to_words(self, seqs, seq_scores=None,decoder_raw=None,n=None,num_candidates=1):
 
@@ -566,17 +566,17 @@ class Decoder(nn.Module):
 
         
         if decoder_raw is not None:
-            decodes =seqs
-            targets, scores = self.generate_dict(decodes)
+            #decodes =seqs
+            targets = self.generate_dict(seqs,num_candidates)
 
-            decodes = torch.zeros((n, self.attention.max_len))
+            decodes = torch.zeros((n, 32))
             prob = 1.0
             for i in range(n):
                 losses = []
                 #decode_candidates = torch.zeros((1, self.attention.max_len))
                 target_i = targets[i]
                 for j in range(num_candidates):
-                    loss = 0.0
+                    
                     
                     input= decoder_raw[i]
                     target= target_i[j].to('cuda')
