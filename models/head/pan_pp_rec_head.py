@@ -167,7 +167,7 @@ class PAN_PP_RecHead(nn.Module):
                               dtype=np.int)
 
         for j, char in enumerate(s):
-            if j > len(32) - 1:
+            if j > 32 - 1:
                 break
             if char in self.char2id:
                 word[j] = self.char2id[char]
@@ -185,80 +185,58 @@ class PAN_PP_RecHead(nn.Module):
 
     def generate_dict(self,targets,maxlen=1):
         
-        if self.training:
-            #pass
-            target_candidates = []
-            distance_candidates = []
-            #beziers = [p.beziers for p in targets]
-            #targets = torch.cat([x for x in targets], dim=0)
-            for target in targets:
-                rec = target.cpu().detach().numpy()
-                rec = self.decode(rec)
+        
+        #pass
+        target_candidates = []
+        distance_candidates = []
+        #beziers = [p.beziers for p in targets]
+        #targets = torch.cat([x for x in targets], dim=0)
+        for target in targets:
+            rec = target.cpu().detach().numpy()
+            rec = self.decode(rec)
 
-                # candidates = {}
-                # candidates[rec] = 0
-                # for word in self.dictionary:
-                #     candidates[word] = eval(rec, word)
-                # candidates = sorted(candidates.items(), key=operator.itemgetter(1))[:10]
+            # candidates = {}
+            # candidates[rec] = 0
+            # for word in self.dictionary:
+            #     candidates[word] = eval(rec, word)
+            # candidates = sorted(candidates.items(), key=operator.itemgetter(1))[:10]
 
-                candidates_list = list(self.trie.all_levenshtein(rec, 1))
-                candidates_list.append(rec)
-                candidates_list = list(set(candidates_list))
-                candidates = {}
-                for candidate in candidates_list:
-                    candidates[candidate] = eval(rec, candidate)
-                candidates = sorted(candidates.items(), key=operator.itemgetter(1))
-                dist_sharp = eval("###", rec)
-                while len(candidates) < 10:
-                    candidates.append(("###", dist_sharp))
-                candidates = candidates[:10]
+            candidates_list = list(self.trie.all_levenshtein(rec, 1))
+            candidates_list.append(rec)
+            candidates_list = list(set(candidates_list))
+            candidates = {}
+            for candidate in candidates_list:
+                candidates[candidate] = eval(rec, candidate)
+            candidates = sorted(candidates.items(), key=operator.itemgetter(1))
+            dist_sharp = eval("###", rec)
+            while len(candidates) < 10:
+                candidates.append(("###", dist_sharp))
+            candidates = candidates[:10]
 
-                candidates_encoded = []
-                distance_can = []
-                for can in candidates:
-                    word = self.encode(can[0])
-                    
-                    candidates_encoded.append(word)
-                    distance_can.append(1 / (can[1] + 0.1))
-                # distance_can = softmax(distance_can)
+            candidates_encoded = []
+            distance_can = []
+            for can in candidates:
+                word = self.encode(can[0])
+                
+                candidates_encoded.append(word)
+                distance_can.append(1 / (can[1] + 0.1))
+            # distance_can = softmax(distance_can)
 
-                distance_candidates.append(distance_can)
-                target_candidates.append(candidates_encoded)
+            distance_candidates.append(distance_can)
+            target_candidates.append(candidates_encoded)
 
-            distance_candidates = torch.Tensor(distance_candidates)
-            # distance_candidates = torch.sum(distance_candidates, dim=0)
-            # distance_candidates = nn.functional.log_softmax(distance_candidates, dim=0)
+        distance_candidates = torch.Tensor(distance_candidates)
+        # distance_candidates = torch.sum(distance_candidates, dim=0)
+        # distance_candidates = nn.functional.log_softmax(distance_candidates, dim=0)
 
-            target_candidates = torch.LongTensor(target_candidates)
-            # distance_candidates = torch.Tensor(distance_candidates).to(device='cuda')
-            targets = target_candidates
-            targets = targets.permute((1, 0, 2))
-            targets = {"targets": targets, "scores": distance_candidates}
+        target_candidates = torch.LongTensor(target_candidates)
+        # distance_candidates = torch.Tensor(distance_candidates).to(device='cuda')
+        targets = target_candidates
+        targets = targets.permute((1, 0, 2))
+        targets = {"targets": targets, "scores": distance_candidates}
 
-            return targets
-        else:
-            target_candidates = []
-
-            distance_candidates = []
-            for target in targets:
-                rec = target.cpu().detach().numpy()
-                rec = self.decode(rec)
-                candidates = {}
-                for word in self.dictionary:
-                    candidates[word] = eval(rec, word)
-                candidates = sorted(candidates.items(), key=operator.itemgetter(1))[: maxlen]
-                candidates_encoded = []
-                distance_can = []
-                for can in candidates:
-                    word = self.encode(can[0])
-                    candidates_encoded.append(word)
-
-                target_candidates.append(candidates_encoded)
-
-            target_candidates = torch.Tensor(target_candidates).to(device="cuda")
-            targets = target_candidates
-
-            return targets
+        return targets
+        
             
 
     def loss_unit(self, inputs, targets, reduce=True):
@@ -287,7 +265,7 @@ class PAN_PP_RecHead(nn.Module):
                         mask,
                         reduce=False)
             if reduce:
-                loss_rec = torch.mean(loss_rec)*32  # [valid]
+                loss_rec = torch.mean(loss_rec)  # [valid]
                 acc_rec = torch.mean(acc_rec)
             
             output.append(1/loss_rec)
@@ -495,7 +473,7 @@ class Decoder(nn.Module):
                               dtype=np.int)
 
         for j, char in enumerate(s):
-            if j > len(32) - 1:
+            if j > 32 - 1:
                 break
             if char in self.char2id:
                 rec[j] = self.char2id[char]
@@ -513,55 +491,6 @@ class Decoder(nn.Module):
     def generate_dict(self,targets,maxlen=1):
         
         if self.training:
-            pass
-            target_candidates = []
-            distance_candidates = []
-            #beziers = [p.beziers for p in targets]
-            targets = torch.cat([x.text for x in targets], dim=0)
-            for target in targets:
-                rec = target.cpu().detach().numpy()
-                rec = self.decode(rec)
-
-                # candidates = {}
-                # candidates[rec] = 0
-                # for word in self.dictionary:
-                #     candidates[word] = eval(rec, word)
-                # candidates = sorted(candidates.items(), key=operator.itemgetter(1))[:10]
-
-                candidates_list = list(self.trie.all_levenshtein(rec, 1))
-                candidates_list.append(rec)
-                candidates_list = list(set(candidates_list))
-                candidates = {}
-                for candidate in candidates_list:
-                    candidates[candidate] = eval(rec, candidate)
-                candidates = sorted(candidates.items(), key=operator.itemgetter(1))
-                dist_sharp = eval("###", rec)
-                while len(candidates) < 10:
-                    candidates.append(("###", dist_sharp))
-                candidates = candidates[:10]
-
-                candidates_encoded = []
-                distance_can = []
-                for can in candidates:
-                    word = self.encode(can[0])
-                    
-                    candidates_encoded.append(word)
-                    distance_can.append(1 / (can[1] + 0.1))
-                # distance_can = softmax(distance_can)
-
-                distance_candidates.append(distance_can)
-                target_candidates.append(candidates_encoded)
-
-            distance_candidates = torch.Tensor(distance_candidates).to(device="cuda")
-            # distance_candidates = torch.sum(distance_candidates, dim=0)
-            # distance_candidates = nn.functional.log_softmax(distance_candidates, dim=0)
-
-            target_candidates = torch.Tensor(target_candidates).to(device="cuda")
-            # distance_candidates = torch.Tensor(distance_candidates).to(device='cuda')
-            targets = target_candidates
-            targets = targets.permute((1, 0, 2))
-            targets = {"targets": targets, "scores": distance_candidates}
-
             return targets
         else:
             target_candidates = []
@@ -671,19 +600,10 @@ class Decoder(nn.Module):
 
                 min_id = np.argmin(losses)
                 decodes[i, :] = targets[i, min_id, :]
-                
 
-
-
-            
             seqs = decodes
             #seq_scores = None
-        
-        
-        
-            
-        
-        
+
 
         for i in range(len(seqs)):
             word = ''
@@ -753,11 +673,11 @@ class Decoder(nn.Module):
             if torch.sum(end) == 0: 
                 break
 
-        words1, word_scores1 = self.to_words_ori( seq[:,1:], seq_score[:,1:]) 
+        #words1, word_scores1 = self.to_words_ori( seq[:,1:], seq_score[:,1:]) 
         
         words, word_scores = self.to_words(seq[:, 1:], seq_score[:, 1:], decoder_raw,batch_size)
-        print('before: ', words1)
-        print('after:', words)
+        #print('before: ', words1)
+        #print('after:', words)
 
         return words, word_scores
 
