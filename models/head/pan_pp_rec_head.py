@@ -274,7 +274,7 @@ class PAN_PP_RecHead(nn.Module):
 
         
         output = torch.stack(output)
-
+        # [10, n, ]
         #print("list loss: ", output)
         
         #output = torch.Tensor(output).to(device="cuda")
@@ -294,7 +294,7 @@ class PAN_PP_RecHead(nn.Module):
         
         #print("KLDLoss: ", temp.shape, temp)
 
-        loss_total += torch.squeeze(torch.mean(temp, dim=1))
+        loss_total += torch.squeeze(torch.mean(temp/20, dim=1))
         #print("total", loss_total)
         #print(K)
         losses = {'loss_rec': loss_total, 'acc_rec': total_acc}
@@ -541,42 +541,19 @@ class Decoder(nn.Module):
             
             #target_candidates: Tensor [batch_size, maxlen(1), 32] 
 
-            targets = target_candidates.permute(1,0,2)
+            #targets = target_candidates.permute(1,0,2)
             
             #targets : Tensor [maxlen(1), batch_size, 32]  
             
 
             return targets  
 
-    def to_words(self, seqs, seq_scores=None,decoder_raw=None,n=None):
+    def to_words(self, seqs, seq_scores=None,decoder_raw=None,n=None,num_candidates=1):
 
         #seqs: [batch, 32],   seq_scores[batch, 32]
 
-        if decoder_raw is None:
-            EPS = 1e-6
-            words = []
-            word_scores = None
-            if seq_scores is not None:
-                word_scores = []
-
-            for i in range(len(seqs)):
-                word = ''
-                word_score = 0
-                for j, char_id in enumerate(seqs[i]):
-                    char_id = int(char_id)
-                    if char_id == self.END_TOKEN:
-                        break
-                    if self.id2char[char_id] in ['PAD', 'UNK']:
-                        continue
-                    word += self.id2char[char_id]
-                    if seq_scores is not None:
-                        word_score += seq_scores[i, j]
-                words.append(word)
-                if seq_scores is not None:
-                    word_scores.append(word_score / (len(word) + EPS))
-            return words, word_scores
-
-        else:
+        
+        if decoder_raw is not None:
             decodes =seqs
             targets = self.generate_dict(decodes)
 
@@ -584,39 +561,72 @@ class Decoder(nn.Module):
             prob = 1.0
             for i in range(n):
                 losses = []
-                decode_candidates = torch.zeros((self.num_candidates, self.attention.max_len))
+                #decode_candidates = torch.zeros((1, self.attention.max_len))
                 target_i = targets[i]
-                for j in range(self.num_candidates):
+                for j in range(num_candidates):
                     loss = 0.0
-                    decoder_input = torch.zeros(1).long().to(rois.device)
-                    decoder_hidden = self.attention.initHidden(1).to(rois.device)
+                    
+                    input= decoder_raw[idx]
+                    target= targets[idx].to('cuda')
+
+                    EPS = 1e-6
+                    N, L, D = input.size()  #inputs.shape: ( number, 32, max_len_vocab ) || targets.shape: ( number, 32 )
+                    mask = target_i != self.char2id['PAD']
+                    input = input.contiguous().view(-1, D)
+                    target_i = target_i.contiguous().view(-1)
+                    loss_rec = F.cross_entropy(input, target, reduce=False)
+                    loss_rec = loss_rec.view(N, L)
+                    
+                    loss_rec = torch.sum(loss_rec * mask.float(),
+                                        dim=1) / (torch.sum(mask.float(), dim=1) + EPS)
+                    
+                    if True:
+                        loss_rec = torch.mean(loss_rec)   # [valid]
+                        #acc_rec = torch.mean(acc_rec)
+                    
+                    loss_rec.append(loss_rec)
+
+
                     for k in range(self.attention.max_len):
                         loss += self.criterion(
                             torch.unsqueeze(decoder_raw[i, k, :], 0), torch.unsqueeze(target_i[j, k].long(), 0)
                         )
                     losses.append(loss.to(device='cpu'))
                 min_id = np.argmin(losses)
-                decodes[i, :] = target_candidates[i, min_id, :]
+                decodes[i, :] = target[i, min_id, :]
             
-            probs=[]
-            for idx in targets.size(0):
-                target_i = targets[idx]     #shape: [ batch_size, 32 ]
-
-                decoder_raw                 #shape: [ batch_size, 32, 106]
-
-                prob = F.cross_entropy(decoder_raw.view(-1,106), target.view(-1), reduce=False)
-                
-                prob = prob.view(n, 32)
-                prob = torch.sum(prob * mask.float(),
-                                dim=1) / (torch.sum(mask.float(), dim=1) + EPS)
-                
-                if reduce:
-                    loss_rec = torch.mean(loss_rec)*32  # [valid]
-                    acc_rec = torch.mean(acc_rec)
-
+            seqs = decodes
+            seq_scores = None
+        
+        
+        
             
-            return decodes, None
+        
+        EPS = 1e-6
+        words = []
+        word_scores = None
+        #seq_scores = None
+        if seq_scores is not None:
+            word_scores = []
 
+        for i in range(len(seqs)):
+            word = ''
+            word_score = 0
+            for j, char_id in enumerate(seqs[i]):
+                char_id = int(char_id)
+                if char_id == self.END_TOKEN:
+                    break
+                if self.id2char[char_id] in ['PAD', 'UNK']:
+                    continue
+                word += self.id2char[char_id]
+                if seq_scores is not None:
+                    word_score += seq_scores[i, j]
+            words.append(word)
+            if seq_scores is not None:
+                word_scores.append(word_score / (len(word) + EPS))
+        return words, word_scores
+
+        
 
 
 
