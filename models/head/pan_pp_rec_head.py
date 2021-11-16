@@ -36,7 +36,7 @@ class PAN_PP_RecHead(nn.Module):
                               padding=1)
         self.bn = nn.BatchNorm2d(hidden_dim)
         self.relu = nn.ReLU(inplace=True)
-
+        self.voc = voc
         self.feature_size = feature_size
         self.encoder = Encoder(hidden_dim, voc, char2id, id2char)
         self.decoder = Decoder(hidden_dim, hidden_dim, 2, voc, char2id,
@@ -135,26 +135,51 @@ class PAN_PP_RecHead(nn.Module):
             words = None
         return x_crops, words
 
-    def decode(self,rec):
-        s = ""
-        for c in rec:
-            c = int(c)
-            if c < 104:
-                s += self.id2char[c]
-            # elif c == 104:
-            #     s += u'口'
+    
 
-        return s
+    def decode(self,rec):
+        
+        #convert number to string
+    
+
+        word=""  
+        for char_id in rec:
+            char_id = int(char_id)
+            if char_id > 106: 
+                continue
+            if char_id == self.char2id['EOS']:
+                break
+            if self.id2char[char_id] in ['PAD', 'UNK']:
+                continue
+            
+            word += self.id2char[char_id]
+            
+        
+        
+        return word, 
     
     def encode(self,s):
-        word=[]
-        for c in s:
-            word.append(int(self.char2id[c]))
 
-        while len(word) < 32:
-            word.append(104)
+        #convert string to number
+
+        word= np.full((32, ),
+                              self.char2id['PAD'],
+                              dtype=np.int)
+
+        for j, char in enumerate(s):
+            if j > len(32) - 1:
+                break
+            if char in self.char2id:
+                word[j] = self.char2id[char]
+            else:
+                word[j] = self.char2id['UNK']
+
+        if len(s) > 32 - 1:
+            word[-1] = self.char2id['EOS']
+        else:
+            word[len(s)] = self.char2id['EOS']
+
         
-        word = word[:32]
         return word
 
 
@@ -442,26 +467,48 @@ class Decoder(nn.Module):
         return out[:, 1:, :]
 
     def decode(self,rec):
-        s = ""
-        for c in rec:
-            c = int(c)
-            if c < 104:
-                s += self.id2char[c]
-            # elif c == 104:
-            #     s += u'口'
-
-        return s
-    
-    def encode(self, s):
-        word=[]
-        for c in s:
-            word.append(self.char2id[c])
-
-        while len(word) < 32:
-            word.append(104)
         
-        word = word[:32]
-        return word
+        #convert number to string
+    
+
+        word=""  
+        for char_id in rec:
+            char_id = int(char_id)
+            if char_id > 106: 
+                continue
+            if char_id == self.char2id['EOS']:
+                break
+            if self.id2char[char_id] in ['PAD', 'UNK']:
+                continue
+            
+            word += self.id2char[char_id]
+            
+
+        return word, 
+    
+    def encode(self,s):
+
+        #convert string to number
+
+        rec= np.full((32, ),
+                              self.char2id['PAD'],
+                              dtype=np.int)
+
+        for j, char in enumerate(s):
+            if j > len(32) - 1:
+                break
+            if char in self.char2id:
+                rec[j] = self.char2id[char]
+            else:
+                rec[j] = self.char2id['UNK']
+
+        if len(s) > 32 - 1:
+            rec[-1] = self.char2id['EOS']
+        else:
+            rec[len(s)] = self.char2id['EOS']
+
+        
+        return rec
 
     def generate_dict(self,targets,maxlen=1):
         
@@ -553,6 +600,30 @@ class Decoder(nn.Module):
             
 
             return target_candidates
+
+    def to_words_ori(self, seqs, seq_scores=None):
+        EPS = 1e-6
+        words = []
+        word_scores = None
+        if seq_scores is not None:
+            word_scores = []
+
+        for i in range(len(seqs)):
+            word = ''
+            word_score = 0
+            for j, char_id in enumerate(seqs[i]):
+                char_id = int(char_id)
+                if char_id == self.END_TOKEN:
+                    break
+                if self.id2char[char_id] in ['PAD', 'UNK']:
+                    continue
+                word += self.id2char[char_id]
+                if seq_scores is not None:
+                    word_score += seq_scores[i, j]
+            words.append(word)
+            if seq_scores is not None:
+                word_scores.append(word_score / (len(word) + EPS))
+        return words, word_scores
 
     def to_words(self, seqs, seq_scores=None,decoder_raw=None,n=None,num_candidates=1):
 
@@ -679,10 +750,14 @@ class Decoder(nn.Module):
             seq[:, t] = idx
             seq_score[:, t] = score
             end = end & (idx != self.START_TOKEN)
-            if torch.sum(end) == 0:
+            if torch.sum(end) == 0: 
                 break
 
+        words1, word_scores1 = self.to_words_ori( seq[:,1:], seq_score[:,1:]) 
+        
         words, word_scores = self.to_words(seq[:, 1:], seq_score[:, 1:], decoder_raw,batch_size)
+        print('before: ', words1)
+        print('after:', words)
 
         return words, word_scores
 

@@ -134,7 +134,7 @@ def get_ann(img, gt_path):
         line = line.replace('\xef\xbb\xbf', '')
         gt = line.split(',')
         word= gt[8] if len(gt) ==9 else ','.join(gt[8:])
-        word = word.replace('\r', '').replace('\n', '').replace(' ', '')
+        word = word.replace('\r', '').replace('\n', '')
         word = full_parse(word)
         if len(word)==0:
             word ="###"
@@ -329,7 +329,7 @@ def get_vocabulary(voc_type, EOS='EOS', PADDING='PAD', UNKNOWN='UNK'):
     elif voc_type == 'ALLCASES_SYMBOLS':
         voc = list(string.printable[:-6])
     elif voc_type =='VIETCASE':
-        tones =['ˋ', 'ˊ', '﹒', 'ˀ', '˜', 'ˇ', 'ˆ', '˒', '‑']
+        tones =[' ','ˋ', 'ˊ', '﹒', 'ˀ', '˜', 'ˇ', 'ˆ', '˒', '‑']
 
         voc = list(string.printable[:-6])
         voc+= tones 
@@ -488,6 +488,7 @@ class PAN_PP_IC15(data.Dataset):
                 gt_word[len(word)] = self.char2id['EOS']
             gt_words[i + 1] = gt_word
             word_mask[i + 1] = 1
+            
 
         #transform? Why do it transform here? It can make mistake bboxes
         if self.is_transform:
