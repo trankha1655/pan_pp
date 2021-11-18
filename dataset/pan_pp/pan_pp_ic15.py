@@ -404,10 +404,10 @@ class PAN_PP_IC15(data.Dataset):
 
                     gt_name = 'gt_' + img_name.split('.')[0] + '.txt'
                     gt_path = gt_dir + gt_name
-                    with open(gt_path,'r') as f:
-                        k = [x for x in f]
-                        if len(k) > 10:
-                            pass
+                    # with open(gt_path,'r') as f:
+                    #     k = [x for x in f]
+                    #     if len(k) > 10:
+                    #         pass
                     gt_paths.append(gt_path)
                     img_path = data_dir + img_name
                     img_paths.append(img_path)
@@ -426,10 +426,10 @@ class PAN_PP_IC15(data.Dataset):
                     gt_name = 'gt_' + gt_name + '.txt' 
                     gt_path = gt_dir + gt_name
 
-                    with open(gt_path,'r') as f:
-                        k = [x for x in f]
-                        if len(k) > 10:
-                            pass
+                    # with open(gt_path,'r') as f:
+                    #     k = [x for x in f]
+                    #     if len(k) > 10:
+                    #         pass
                     gt_paths.append(gt_path)
                     img_path = data_dir + img_name
                     img_paths.append(img_path)
