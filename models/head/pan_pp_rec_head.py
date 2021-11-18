@@ -42,7 +42,7 @@ class PAN_PP_RecHead(nn.Module):
         self.decoder = Decoder(hidden_dim, hidden_dim, 2, voc, char2id,
                                id2char)
 
-        self.dictionary = open("vn_dictionary.txt").read().replace("\n\n", "\n").split("\n")
+        self.dictionary = open("vn_dictionary.txt",'r',encoding='utf-8').read().replace("\n\n", "\n").split("\n")
         self.trie = Trie(self.dictionary)
 
         for m in self.modules():
@@ -402,7 +402,7 @@ class Decoder(nn.Module):
         self.cls = nn.Linear(self.hidden_dim + self.feature_dim,
                              self.vocab_size)
 
-        self.dictionary = open("vn_dictionary.txt").read().replace("\n\n", "\n").split("\n")
+        self.dictionary = open("vn_dictionary.txt",'r',encoding='utf-8').read().replace("\n\n", "\n").split("\n")
         self.trie = Trie(self.dictionary)
 
     def forward(self, x, holistic_feature, target):
