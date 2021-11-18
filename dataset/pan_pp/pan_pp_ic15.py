@@ -126,7 +126,7 @@ def get_img(img_path, read_type='pil'):
 
 def get_ann(img, gt_path):
     h, w = img.shape[0:2]
-    lines = mmcv.list_from_file(gt_path)
+    lines = mmcv.list_from_file(gt_path,encoding='utf-8')
     bboxes = []
     words = []
     for line in lines:
