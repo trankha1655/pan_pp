@@ -63,7 +63,7 @@ train_cfg = dict(
     epoch=50,
     optimizer='Adam',
     use_ex=False,
-    pretrain= '../panpp_r18_joint_train.pth.tar',
+    pretrain= 'panpp_r18_joint_train.pth.tar',
     lang_pretrain='EN'
     
 )
