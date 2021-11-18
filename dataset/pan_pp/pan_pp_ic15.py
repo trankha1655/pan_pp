@@ -132,7 +132,7 @@ def get_ann(img, gt_path):
     bboxes = []
     words = []
     for line in lines:
-        line = line.decode('utf-8-sig')
+        #line = line.decode('utf-8-sig')
         line = line.replace('\xef\xbb\xbf', '')
         gt = line.split(',')
         word= gt[8] if len(gt) ==9 else ','.join(gt[8:])
