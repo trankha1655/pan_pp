@@ -22,7 +22,7 @@ ic15_test_gt_dir = ic15_root_dir + \
 
 
 
-vin_root_dir = './data/ICDAR2015/vietnamese_orgin/'  '../../../../Databases/Vintext/vietnamese_original/vietnamese/'
+vin_root_dir =  '../../../../Databases/Vintext/vietnamese_original/vietnamese/'
 
 vin_train_data_dir  = vin_root_dir +    'train_images/'
 vin_train_gt_dir    = vin_root_dir +    'labels/'
